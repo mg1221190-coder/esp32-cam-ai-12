@@ -1,0 +1,50 @@
+name: Build ESP32-CAM AI firmware
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    container:
+      image: espressif/idf:v5.5.2
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract project ZIP
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile("esp32cam_ai_android_build.zip") as z:
+              z.extractall("project")
+          PY
+
+      - name: Build ESP32-CAM
+        shell: bash
+        run: |
+          . /opt/esp/idf/export.sh
+          cd project/esp32cam_phone
+          idf.py set-target esp32
+          idf.py build
+
+      - name: Prepare firmware
+        shell: bash
+        run: |
+          cd project/esp32cam_phone
+          mkdir -p flash
+          cp build/bootloader/bootloader.bin flash/bootloader.bin
+          cp build/partition_table/partition-table.bin flash/partitions.bin
+          cp build/*.bin flash/ai-cam.bin
+
+          printf 'bootloader.bin @ 0x1000\npartitions.bin @ 0x8000\nai-cam.bin @ 0x10000\n' > flash/FLASH_OFFSETS.txt
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32-cam-ai-firmware
+          path: project/esp32cam_phone/flash/
+          if-no-files-found: error
